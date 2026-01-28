@@ -22,7 +22,7 @@ Step 2: Review Loop (minimum 3 passes)
   - Spawn fresh review agent with spec + clarifications + plan
   - Agent provides feedback + identifies critical assumptions
   - Agent verifies versions/APIs against live docs via Context7
-  - Surface assumptions as questions to user
+  - Surface identified issues and assumptions to user
   - Prompt user for optional additional feedback
   - Apply all feedback to plan
   - After pass 3+, ask user to continue or finalize
@@ -234,7 +234,43 @@ Full feedback is already saved to `pass_N_feedback.md` by the agent.
 
 **If alignment warning received:** Surface to user via AskUserQuestion before proceeding.
 
-#### 2c. Surface Assumptions to User
+#### 2b-bis. Surface Issues to User
+
+After processing the agent summary, read feedback file(s) and display identified issues:
+
+1. **Read feedback files**:
+   - Read `pass_N_feedback.md` for default review issues
+   - If custom reviewer enabled, also read `pass_N_custom_feedback.md`
+
+2. **Extract issues** from the "Plan Feedback" section:
+   - Parse each `### Issue N:` block (or `#### Issue N:` for custom feedback)
+   - Extract: title, location, problem, suggestion
+
+3. **Display issues to the user** before asking questions:
+
+```
+## Pass {N} Review Findings
+
+### Issues Identified ({count} total)
+
+**Issue 1: {title}**
+- Location: {location}
+- Problem: {description}
+- Suggestion: {recommendation}
+
+**Issue 2: {title}**
+...
+
+[If custom reviewer enabled:]
+### Additional Issues from {custom_focus} Review ({count})
+
+**Issue 1: {title}**
+...
+```
+
+If no issues found, display: "No issues identified in this pass."
+
+#### 2c. Surface Questions to User
 
 If the agent identified critical assumptions:
 - Use AskUserQuestion to present each question

@@ -145,6 +145,8 @@ After writing the feedback file, return ONLY this brief summary to the orchestra
 4. **Pass Summary**: 1-2 sentences on plan health
 
 DO NOT return the full feedback content - it is saved to the file.
+
+**Note:** The orchestrator will read the feedback file to extract and display issue details to the user. This keeps return payloads thin while ensuring users see all identified issues.
 ```
 
 ---
