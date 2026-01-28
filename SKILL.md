@@ -21,6 +21,7 @@ Step 1: Generate Initial Plan (plan.md v0)
 Step 2: Review Loop (minimum 3 passes)
   - Spawn fresh review agent with spec + clarifications + plan
   - Agent provides feedback + identifies critical assumptions
+  - Agent verifies versions/APIs against live docs via Context7
   - Surface assumptions as questions to user
   - Prompt user for optional additional feedback
   - Apply all feedback to plan
@@ -28,6 +29,10 @@ Step 2: Review Loop (minimum 3 passes)
          ↓
 Output: Final plan.md + clarifications.md + audit trail
 ```
+
+**Note:** Review agents use Context7 (`mcp__context7__resolve-library-id` → `mcp__context7__query-docs`) to verify that any package versions, GitHub Actions, APIs, or framework versions mentioned in the plan are current. This prevents recommending outdated versions based on training data.
+
+**Fallback:** If Context7 MCP tools are unavailable, install the [context7 skill](https://skills.sh/intellectronica/agent-skills/context7) which provides equivalent functionality via HTTP API.
 
 ## Input Requirements
 
@@ -42,15 +47,24 @@ Create a namespaced directory under Claude's plan directory:
 
 ```
 ~/.claude/plans/plan-refiner/{spec-slug}/
-├── initial_spec.md      # The starting requirements (immutable)
-├── plan.md              # Current plan (updated each pass)
-├── clarifications.md    # Accumulated Q&A and user feedback
+├── initial_spec.md           # The starting requirements (immutable)
+├── plan.md                   # Current plan (updated each pass)
+├── clarifications.md         # Accumulated Q&A and user feedback
+├── config.json               # Run configuration (includes custom_reviewer settings)
 ├── audit/
-│   ├── plan_v0.md       # Initial plan from spec
-│   ├── plan_v1.md       # After pass 1
-│   ├── plan_v2.md       # After pass 2
-│   └── plan_v3.md       # After pass 3, etc.
-└── pass_N_feedback.md   # Feedback from each review pass
+│   ├── plan_v0.md            # Initial plan from spec
+│   ├── plan_v1.md            # After pass 1
+│   ├── plan_v2.md            # After pass 2
+│   └── plan_v3.md            # After pass 3, etc.
+├── pass_N_feedback.md        # Default review feedback for each pass
+└── pass_N_custom_feedback.md # Custom review feedback (if custom reviewer enabled)
+```
+
+### Global Preferences
+
+```
+~/.claude/plans/plan-refiner/
+└── preferences.json          # Global preferences across all runs
 ```
 
 **Spec Slug Generation:**
@@ -75,6 +89,56 @@ To prevent drift from the original specification:
 - **Update agents verify changes align with spec** before writing
 - **Summaries include alignment status** (e.g., "Aligned" or "Warning: divergence detected")
 
+## Startup Configuration
+
+Before beginning refinement, ask about optional custom review.
+
+### Startup Questions
+
+**Question 1: Custom Reviewer**
+
+Check for `~/.claude/plans/plan-refiner/preferences.json`:
+
+If `preferences.json` exists and has a previous `custom_reviewer`:
+- Ask: "Last time you used '{skill-name}' as additional reviewer. Use it again?"
+- Options: Yes / No / Different skill
+
+Otherwise:
+- Ask: "Add a custom review agent for specialized feedback? (e.g., security, performance)"
+- Options: No (default only) / Yes, specify skill
+
+**Question 2: Skill Specification** (if yes to custom reviewer)
+
+Ask: "Specify the custom review skill:"
+- Skill name (e.g., 'security-reviewer')
+- Skill path (absolute path)
+- Skip (use default only)
+
+Also ask for the focus description (e.g., "security considerations", "performance optimization", "accessibility compliance").
+
+### Preferences Persistence
+
+Store in `~/.claude/plans/plan-refiner/preferences.json`:
+
+```json
+{
+  "custom_reviewer": {
+    "enabled": true,
+    "type": "skill_name",
+    "value": "security-reviewer",
+    "focus": "security considerations"
+  },
+  "custom_reviewer_history": ["security-reviewer", "performance-reviewer"],
+  "updated_at": "2026-01-28T..."
+}
+```
+
+- `custom_reviewer`: Current configuration (or null if disabled)
+- `custom_reviewer_history`: Previously used skills (for suggestions)
+- `updated_at`: Last modification timestamp
+
+---
+
 ## Execution Steps
 
 ### Step 1: Setup and Initial Plan Generation
@@ -85,7 +149,22 @@ To prevent drift from the original specification:
 3. **Save or verify initial_spec.md** from user input
 4. **Create clarifications.md** (empty initially)
 5. **Create audit/ directory**
-6. **Spawn Plan Generation Agent** to create initial plan:
+6. **Create config.json** with run configuration:
+   ```json
+   {
+     "created_at": "2026-01-28T...",
+     "custom_reviewer": {
+       "enabled": true,
+       "type": "skill_name",
+       "value": "security-reviewer",
+       "focus": "security considerations"
+     },
+     "current_pass": 0,
+     "status": "in_progress"
+   }
+   ```
+   - Set `custom_reviewer` to null if not configured
+7. **Spawn Plan Generation Agent** to create initial plan:
    - Use Task tool with `subagent_type: general-purpose`
    - Provide file paths (not contents): `initial_spec.md`, `plan.md`, `audit/plan_v0.md`
    - Agent reads spec, writes plan to both locations
@@ -96,7 +175,7 @@ To prevent drift from the original specification:
 
 For each pass (1, 2, 3, ...):
 
-#### 2a. Spawn Fresh Review Agent
+#### 2a. Spawn Default Review Agent
 
 Use the Task tool with `subagent_type: general-purpose` to create a fresh agent context.
 
@@ -116,6 +195,33 @@ Use the Task tool with `subagent_type: general-purpose` to create a fresh agent 
 3. Perform review
 4. Write detailed feedback to `pass_N_feedback.md`
 5. Return ONLY: alignment status + summary of issues + critical assumption questions
+
+#### 2a-bis. Spawn Custom Review Agent (if configured)
+
+If `config.json` has `custom_reviewer.enabled: true`:
+
+1. **Spawn Custom Review Sub-Agent** via Task tool:
+   - `subagent_type: general-purpose`
+   - Provide file paths:
+     - Spec path: `initial_spec.md`
+     - Plan path: `plan.md`
+     - Default feedback path: `pass_N_feedback.md`
+   - Output path: `pass_N_custom_feedback.md`
+   - Use prompt template from `references/custom-review-prompt.md`
+   - Inject the custom focus from config (e.g., "security considerations")
+
+2. **Process Custom Review Summary**:
+   - Custom agent returns: focus area + additional issue count + additional questions + assessment
+   - Additional issues are written to `pass_N_custom_feedback.md`
+
+3. **Merge Feedback for Processing**:
+   - Default feedback: `pass_N_feedback.md`
+   - Custom feedback: `pass_N_custom_feedback.md`
+   - Both files remain separate for audit purposes
+   - Combined questions from both reviews are surfaced to user in step 2c
+   - Update total issue count in summaries
+
+**If custom reviewer skill not found:** Log warning and continue with default review only.
 
 #### 2b. Process Agent Summary
 
@@ -197,7 +303,8 @@ Present the user with:
 
 See the following templates in `references/`:
 - `generation-prompt.md` - Initial plan generation agent
-- `review-prompt.md` - Review agents for each pass
+- `review-prompt.md` - Default review agents for each pass
+- `custom-review-prompt.md` - Custom review agents (supplementary, specialized feedback)
 - `update-prompt.md` - Plan update agent after feedback
 
 ## Pass Focus Areas
@@ -207,7 +314,7 @@ Each pass has a primary focus while still reviewing the full plan:
 | Pass | Primary Focus |
 |------|---------------|
 | 1 | Alignment with spec, surface major assumptions |
-| 2 | Completeness and feasibility, clarify remaining gaps |
+| 2 | Completeness and feasibility, clarify remaining gaps, **version verification via Context7** |
 | 3+ | Final polish, coherence, edge cases |
 
 ## Example Invocation

@@ -2,6 +2,8 @@
 
 Use this template when spawning a fresh review agent via the Task tool.
 
+> **Note:** This is the default review. If a custom reviewer is configured, it runs as a separate sub-agent after this review completes. Custom feedback is merged into the consolidated pass feedback. See `custom-review-prompt.md` for the custom review template.
+
 ---
 
 ## Prompt Structure
@@ -39,6 +41,22 @@ BEFORE providing any other feedback, verify the plan still aligns with the origi
 
 This alignment check is critical to prevent drift over multiple passes.
 
+## Version & API Verification
+
+For any versions, APIs, or dependencies mentioned in the plan, verify them against current documentation using Context7:
+
+1. **Identify versioned items**: Package versions, GitHub Actions, APIs, frameworks
+2. **Look up each item**: Use `mcp__context7__resolve-library-id` to get the library ID, then `mcp__context7__query-docs` to check current versions
+3. **Flag outdated versions**: If the plan recommends an outdated version, add an issue with the correct current version
+
+Examples of items to verify:
+- `actions/checkout@v4` → check GitHub Actions docs
+- `react@18.2.0` → check React docs for latest stable
+- Any API endpoints with version numbers
+- Framework-specific version requirements
+
+**Fallback (if MCP tools unavailable):** Use the context7 skill to query documentation via HTTP API at `https://context7.com/api/v2/`.
+
 ## Your Task
 
 1. **Read all input files** (starting with the spec)
@@ -61,6 +79,7 @@ Focus on:
 - Clarity (is the plan unambiguous?)
 - Coherence (do sections fit together logically?)
 - Edge cases and error handling
+- Version accuracy (are recommended versions current per Context7 lookups?)
 
 ### Critical Assumptions
 
