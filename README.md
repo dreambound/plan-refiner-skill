@@ -2,6 +2,50 @@
 
 An agent skill that generates and iteratively refines implementation plans through multiple review passes with fresh agent context.
 
+## Flow
+
+```
+                      ┌──────────────────────┐
+                      │      User Spec       │
+                      └──────────┬───────────┘
+                                 │
+                                 ▼
+                      ┌──────────────────────┐
+                      │   Generate Initial   │  ← Fresh Agent
+                      │        Plan          │
+                      └──────────┬───────────┘
+                                 │
+┌────────────────────────────────┴────────────────────────────────┐
+│                     REVIEW LOOP (3+ passes)                     │
+│                     (repeat until satisfied)                    │
+│                                                                 │
+│      ┌─────────────┐           ┌──────────────────┐             │
+│      │ Fresh Review│  ───────▶ │  Surface Issues  │             │
+│      │    Agent    │           │  & Assumptions   │             │
+│      └─────────────┘           └────────┬─────────┘             │
+│                                         │                       │
+│                                         ▼                       │
+│                                ┌──────────────────┐             │
+│                                │  User Feedback   │             │
+│                                │  & Answers Q's   │             │
+│                                └────────┬─────────┘             │
+│                                         │                       │
+│                                         ▼                       │
+│      ┌─────────────┐           ┌──────────────────┐             │
+│      │Update Agent │  ◀─────── │    Apply All     │             │
+│      │(checks spec)│           │    Feedback      │             │
+│      └──────┬──────┘           └──────────────────┘             │
+│             │                                                   │
+│             └───────────────────────────────────────────────────┤
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+                                  ▼
+                      ┌──────────────────────┐
+                      │    Finalized Plan    │
+                      │   (audit preserved)  │
+                      └──────────────────────┘
+```
+
 ## Installation
 
 ```bash
