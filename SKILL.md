@@ -435,10 +435,13 @@ Options:
 ### Step 3: Finalization
 
 Present the user with:
-- Final `plan.md` location
 - Summary of changes across all passes (compiled from `pass_N_changelog.md` files)
 - Location of audit trail
 - Total passes completed and convergence status
+
+Then output the following instruction verbatim (substituting the actual plan path):
+
+> The plan is already written in this file ~/.claude/plans/plan-refiner/{spec-slug}/plan.md. Read it and submit it for approval, calling ExitPlanMode.
 
 ## Subagent Prompt Templates
 
