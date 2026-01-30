@@ -1,6 +1,6 @@
 ---
 name: plan-refiner
-description: Generate and iteratively refine implementation plans from an initial spec/prompt. Takes a specification as input, generates an initial plan, then refines it through multiple review passes (minimum 3) with fresh agent context. User can continue beyond 3 passes until satisfied. Use when turning requirements into polished implementation plans.
+description: Generate and iteratively refine implementation plans from an initial spec/prompt. Takes a specification as input, generates an initial plan, then refines it through parallel multi-reviewer passes (minimum 3) with fresh agent context. User can continue beyond 3 passes until satisfied. Use when turning requirements into polished implementation plans.
 license: MIT
 metadata:
   author: dreambound
@@ -19,12 +19,13 @@ Input: initial_spec.md (starting prompt/requirements)
 Step 1: Generate Initial Plan (plan.md v0)
          ↓
 Step 2: Review Loop (minimum 3 passes)
-  - Spawn fresh review agent with spec + clarifications + plan
-  - Agent provides feedback + identifies critical assumptions
-  - Agent verifies versions/APIs against live docs via Context7
+  - Spawn up to 3 review agents in parallel:
+    • Standard reviewer (spec alignment, completeness, versions via C7)
+    • Adversarial reviewer (assumptions, failure modes)
+    • Custom reviewer (optional — specialized focus)
   - Surface identified issues and assumptions to user
   - Prompt user for optional additional feedback
-  - Apply all feedback to plan
+  - Apply all feedback to plan via update agent
   - After pass 3+, ask user to continue or finalize
          ↓
 Output: Final plan.md + clarifications.md + audit trail
@@ -105,7 +106,7 @@ If a subagent fails (returns an error, writes an empty file, or doesn't write it
 
 ### Context Budget Considerations
 
-The orchestrator accumulates ~3,000-6,000 tokens per pass from agent spawn prompts, return summaries, issue display, and user interactions. With initial setup overhead (~5,000-8,000 tokens), the orchestrator context remains healthy through **7-8 passes**. Beyond that, quality may degrade.
+The orchestrator accumulates ~4,000-8,000 tokens per pass from agent spawn prompts (up to 3 agents), return summaries, issue display, and user interactions. With initial setup overhead (~5,000-8,000 tokens), the orchestrator context remains healthy through **7-8 passes**. Beyond that, quality may degrade.
 
 - **Passes 1-5:** Safe. No action needed.
 - **Passes 6-7:** Monitor. Consider compacting orchestrator context by summarizing prior pass interactions.

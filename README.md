@@ -45,10 +45,10 @@ An agent skill that generates and iteratively refines implementation plans throu
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
-                ┌──────────────────────┐
-                │    Finalized Plan    │
-                │   (audit preserved)  │
-                └──────────────────────┘
+                 ┌─────────────────────┐
+                 │   Finalized Plan    │
+                 │  (audit preserved)  │
+                 └─────────────────────┘
 ```
 
 ## Installation
