@@ -52,6 +52,8 @@ Describe the overall architecture and key technical decisions. Include:
 - Integration points
 - Key dependencies
 
+**Note on versions:** Use your best knowledge for initial version recommendations. The review agents will verify all versions against live documentation via Context7 in the first review pass and flag any outdated recommendations.
+
 ### Implementation Steps
 Numbered, actionable steps. Each step should:
 - Be specific enough to execute
@@ -82,6 +84,7 @@ Any ambiguities in the spec that need clarification. Format as questions for the
 
 - Be specific and actionable, not vague
 - Include enough detail that another agent could execute the plan
+- **Target 200-500 lines.** If the plan exceeds 500 lines, consider splitting into phases or using a summary+details structure. Overly long plans overwhelm downstream reviewers.
 - Reference the spec requirements explicitly
 - Don't add features not in the spec
 - If the spec is ambiguous, note it in Open Questions rather than assuming

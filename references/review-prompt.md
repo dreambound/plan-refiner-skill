@@ -2,7 +2,7 @@
 
 Use this template when spawning a fresh review agent via the Task tool.
 
-> **Note:** This is the default review. If a custom reviewer is configured, it runs as a separate sub-agent after this review completes. Custom feedback is merged into the consolidated pass feedback. See `custom-review-prompt.md` for the custom review template.
+> **Note:** This is the standard review agent. It runs in **parallel** with the adversarial review agent (`adversarial-review-prompt.md`). If a custom reviewer is configured, it runs sequentially after both parallel agents complete. See `custom-review-prompt.md` for the custom review template.
 
 ---
 
@@ -17,12 +17,15 @@ Your task is to review an implementation plan against its original specification
 
 This is pass {PASS_NUMBER} of a multi-pass review process. Each pass is conducted by a fresh agent to provide unbiased perspective.
 
-### Pass Focus Areas
-- Pass 1: Alignment with spec, surface major assumptions
-- Pass 2: Completeness and feasibility, clarify remaining gaps
-- Pass 3+: Final polish, coherence, edge cases
-
-While focusing on the primary area for this pass, review the full plan holistically.
+### Review Scope
+Evaluate ALL of the following criteria on every pass:
+- Alignment with the original specification
+- Completeness (are all requirements addressed?)
+- Feasibility (is the approach realistic?)
+- Clarity (is the plan unambiguous?)
+- Coherence (do sections fit together logically?)
+- Edge cases and error handling
+- Version accuracy (are recommended versions current per Context7 lookups?)
 
 ## File Paths
 
@@ -55,7 +58,7 @@ Examples of items to verify:
 - Any API endpoints with version numbers
 - Framework-specific version requirements
 
-**Fallback (if MCP tools unavailable):** Use the context7 skill to query documentation via HTTP API at `https://context7.com/api/v2/`.
+**Fallback (if Context7 MCP tools unavailable):** Skip version verification and note in the feedback file: "Version verification skipped — Context7 unavailable. Manual verification recommended."
 
 ## Your Task
 
@@ -68,6 +71,7 @@ Examples of items to verify:
 ### Feedback Content
 
 In the feedback file, provide specific, actionable feedback. For each issue:
+- **Severity**: Rate as Critical (blocks implementation), High (significant gap), Medium (improvement needed), or Low (minor suggestion)
 - **Location**: Where in the plan (section/line)
 - **Issue**: What's wrong or could be improved
 - **Suggestion**: Specific change to make
@@ -89,7 +93,7 @@ In the feedback file, also identify assumptions that should be clarified with th
 - Technical choices that depend on user preferences or constraints
 - Scope decisions (what's included vs excluded)
 
-For each assumption, phrase it as a clear question for the user.
+For each assumption, phrase it as a clear question for the user. **Prioritize questions that would cause the largest plan changes.** The orchestrator will surface only the 3-5 most impactful questions per pass across all reviewers. Lower-priority questions remain in the feedback file for reference.
 
 ## Feedback File Format
 
@@ -106,6 +110,7 @@ Write to {FEEDBACK_PATH} with this structure:
 ## Plan Feedback
 
 ### Issue 1: [Brief title]
+**Severity:** [Critical | High | Medium | Low]
 **Location:** [Section or area of plan]
 **Issue:** [Description of the problem]
 **Suggestion:** [Specific recommended change]
@@ -129,6 +134,10 @@ Write to {FEEDBACK_PATH} with this structure:
 
 ---
 
+## Convergence Assessment
+
+**Convergence Signal:** ["Significant issues remain" or "No significant issues found — plan is ready"]
+
 ## Summary
 
 [2-3 sentence summary of the plan's current state and main areas for improvement]
@@ -140,9 +149,12 @@ Write to {FEEDBACK_PATH} with this structure:
 After writing the feedback file, return ONLY this brief summary to the orchestrator:
 
 1. **Alignment Status**: "Aligned" or "Warning: [brief drift description]"
-2. **Issue Count**: "Found N issues to address"
-3. **Critical Questions**: [List the questions only, not full context]
-4. **Pass Summary**: 1-2 sentences on plan health
+2. **Issue Count**: "Found N issues (X Critical, Y High, Z Medium, W Low)"
+3. **Convergence Signal**: "Significant issues remain" or "No significant issues found — plan is ready"
+4. **Critical Questions**: [List the questions only, not full context]
+5. **Pass Summary**: 1-2 sentences on plan health
+
+A "No significant issues found" convergence signal means no Critical or High severity issues were identified. This signal helps the orchestrator detect when the plan has converged and offer early exit.
 
 DO NOT return the full feedback content - it is saved to the file.
 

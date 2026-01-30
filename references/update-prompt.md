@@ -16,12 +16,15 @@ Your task is to update the plan based on review feedback and user clarifications
 READ the following files using the Read tool:
 1. **Original Specification** (ALWAYS read first - source of truth): {SPEC_PATH}
 2. **Current Plan**: {PLAN_PATH}
-3. **Review Feedback**: {FEEDBACK_PATH}
-4. **User Clarifications**: {CLARIFICATIONS_PATH}
+3. **User Clarifications** (user answers supersede reviewer suggestions): {CLARIFICATIONS_PATH}
+4. **Standard Review Feedback**: {FEEDBACK_PATH}
+5. **Adversarial Review Feedback**: {ADVERSARIAL_FEEDBACK_PATH}
+6. **Custom Review Feedback** (if custom review is enabled): {CUSTOM_FEEDBACK_PATH}
 
 WRITE your outputs to:
 - **Updated Plan**: {PLAN_PATH} (overwrite)
 - **Audit Backup**: {AUDIT_PATH}
+- **Changelog**: {CHANGELOG_PATH}
 
 ## Critical: Spec Alignment
 
@@ -36,17 +39,20 @@ This prevents the plan from drifting over multiple passes.
 
 1. **Read the original spec** first (source of truth)
 2. **Read the current plan** to understand existing structure
-3. **Read the review feedback** for issues to address
-4. **Read clarifications** for user answers and additional feedback
-5. **Verify each proposed change** aligns with the spec
-6. **Update the plan** incorporating valid feedback
-7. **Write** updated plan and backup
-8. **Return** brief summary to orchestrator
+3. **Read clarifications** for user answers and additional feedback (user answers supersede reviewer suggestions)
+4. **Read the standard review feedback** for issues to address
+5. **Read the adversarial review feedback** for additional challenges and concerns
+6. **Read custom review feedback** if it exists (file may not be present if custom reviewer is disabled)
+7. **Verify each proposed change** aligns with the spec
+8. **Update the plan** incorporating valid feedback from all sources
+9. **Write** updated plan and changelog
+10. **Return** brief summary to orchestrator
 
 ## Update Guidelines
 
 ### What to Incorporate
-- All issues raised in the feedback that align with spec
+- All issues raised in the standard review feedback that align with spec
+- Valid concerns from the adversarial review (assumptions challenged, failure modes, simplification opportunities)
 - User answers to assumption questions
 - Additional user feedback from clarifications
 - Improved clarity, structure, and completeness
@@ -58,6 +64,21 @@ This prevents the plan from drifting over multiple passes.
 - Speculative additions not in feedback
 
 When rejecting a change, note it in your summary so the orchestrator can surface it to the user if needed.
+
+### Conflict Resolution
+
+When standard, adversarial, and custom reviewers raise contradictory feedback:
+
+1. **Spec alignment takes precedence over all feedback** — if one reviewer's suggestion aligns with the spec and another's contradicts it, follow the spec-aligned suggestion
+2. **When reviewers directly contradict** (e.g., standard says "add error handling for X" and adversarial says "error handling is over-engineered"), note the disagreement in your summary and present both options for the user to decide
+3. **Prefer simplification over addition** when both options are spec-compatible
+4. **Later user clarifications supersede earlier ones** on the same topic — if the user answered "Yes, support pagination" in pass 1 but "No, pagination is not needed" in pass 3, follow the pass 3 answer
+
+### Deduplication
+
+Standard and adversarial reviews may raise the same underlying issue in different terms (e.g., "missing edge case for empty input" vs "failure mode: no handling for empty input"). When this happens:
+- Address the issue **once** in the plan update
+- Note the convergence in your summary (e.g., "Both reviewers flagged empty input handling — addressed once")
 
 ### Quality Standards
 - Address every issue in the feedback (or explain why rejected)
@@ -72,6 +93,30 @@ When rejecting a change, note it in your summary so the orchestrator can surface
 2. Make targeted edits to address feedback
 3. Don't rewrite sections that weren't flagged
 4. Ensure the plan remains coherent after changes
+
+## Writing the Changelog
+
+After updating the plan, write a changelog file to `{CHANGELOG_PATH}` with this structure:
+
+```markdown
+# Pass {PASS_NUMBER} Changelog
+
+## Changes Made
+- [Brief description of change 1 and why]
+- [Brief description of change 2 and why]
+- ...
+
+## Feedback Addressed
+- Standard review: [N of M issues addressed]
+- Adversarial review: [N of M issues addressed]
+- Custom review: [N of M issues addressed, if applicable]
+
+## Rejected Changes
+- [Description of rejected change and reason, if any]
+
+## Reviewer Conflicts Noted
+- [Description of conflict and resolution, if any]
+```
 
 ## Return Format (to Orchestrator)
 
@@ -97,8 +142,12 @@ When using this template, replace:
 | `{SPEC_PATH}` | Full path to `initial_spec.md` |
 | `{PLAN_PATH}` | Full path to `plan.md` |
 | `{FEEDBACK_PATH}` | Full path to `pass_N_feedback.md` |
+| `{ADVERSARIAL_FEEDBACK_PATH}` | Full path to `pass_N_adversarial_feedback.md` |
+| `{CUSTOM_FEEDBACK_PATH}` | Full path to `pass_N_custom_feedback.md` (conditional: only if custom review is enabled) |
 | `{CLARIFICATIONS_PATH}` | Full path to `clarifications.md` |
 | `{AUDIT_PATH}` | Full path to `audit/plan_v{pass}.md` |
+| `{CHANGELOG_PATH}` | Full path to `pass_N_changelog.md` |
+| `{PASS_NUMBER}` | Current pass number (1, 2, 3, ...) |
 
 ## Task Tool Configuration
 
