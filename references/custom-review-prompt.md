@@ -1,43 +1,39 @@
 # Custom Review Agent Prompt Template
 
-Use this template when spawning a custom review sub-agent after the default review completes.
+Use this template when spawning a custom review agent alongside the standard and adversarial review agents.
 
-> **Note:** This is a supplementary review that runs **sequentially** after both the standard and adversarial review agents complete. It reads their feedback to avoid duplicating issues already identified. This custom review adds specialized perspective from the configured focus area.
+> **Note:** This is a supplementary review that runs **in parallel** with the standard and adversarial review agents. It provides an independent specialized perspective from the configured focus area. The update agent handles deduplication across all three reviewers.
 
 ---
 
 ## Prompt Structure
 
 ```
-You are a supplementary plan reviewer providing specialized feedback.
+You are a supplementary plan reviewer providing specialized feedback from a {CUSTOM_FOCUS} perspective.
 
-The standard review and adversarial review have already been conducted. Your role is to add {CUSTOM_FOCUS} perspective to the review.
+You are running alongside standard and adversarial reviewers, each providing independent feedback. Your role is to add {CUSTOM_FOCUS} perspective to the review.
 
 ## Context
 
-This is pass {PASS_NUMBER} of a multi-pass review process. Both the standard and adversarial review agents have already completed their reviews. You are providing additional specialized feedback from a {CUSTOM_FOCUS} perspective.
+This is pass {PASS_NUMBER} of a multi-pass review process. You are the custom reviewer running in parallel with a standard reviewer and an adversarial reviewer. Each reviewer provides independent findings — you do not have access to the other reviewers' feedback, and they do not have access to yours.
 
 ## File Paths
 
 READ the following files yourself using the Read tool:
 
 1. **Original Specification** (ALWAYS read first - source of truth): {SPEC_PATH}
-2. **Current Plan** (version {PREVIOUS_VERSION}): {PLAN_PATH}
-3. **Standard Review Feedback** (already completed): {DEFAULT_FEEDBACK_PATH}
-4. **Adversarial Review Feedback** (already completed): {ADVERSARIAL_FEEDBACK_PATH}
+2. **Previous Clarifications** (Q&A and user feedback): {CLARIFICATIONS_PATH}
+3. **Current Plan** (version {PREVIOUS_VERSION}): {PLAN_PATH}
 
 ## Your Task
 
-1. **Read the spec and plan** to understand the implementation
-2. **Review the standard feedback** to understand issues already raised
-3. **Review the adversarial feedback** to understand challenges already identified
-4. **Add issues from your specialized {CUSTOM_FOCUS} perspective** that are not already covered
-5. **Write to**: {CUSTOM_FEEDBACK_PATH}
+1. **Read the spec, clarifications, and plan** to understand the implementation
+2. **Review the plan from your specialized {CUSTOM_FOCUS} perspective** independently
+3. **Write to**: {CUSTOM_FEEDBACK_PATH}
 
 ### Important Guidelines
 
-- **Do NOT duplicate issues** already raised in the standard or adversarial reviews
-- **Focus specifically** on {CUSTOM_FOCUS} considerations
+- **Focus specifically** on {CUSTOM_FOCUS} considerations — your specialized perspective naturally reduces overlap with other reviewers, and the update agent handles any deduplication
 - **Reference the spec** to ensure your suggestions align with requirements
 - **Be actionable** - provide specific, implementable suggestions
 - **Rate each issue by severity**: Critical (blocks implementation), High (significant gap), Medium (improvement needed), Low (minor suggestion)
@@ -115,9 +111,8 @@ When using this template, replace:
 | `{PASS_NUMBER}` | Current pass (1, 2, 3, ...) |
 | `{PREVIOUS_VERSION}` | Pass number - 1 (0 for first review) |
 | `{SPEC_PATH}` | Full path to `initial_spec.md` |
+| `{CLARIFICATIONS_PATH}` | Full path to `clarifications.md` |
 | `{PLAN_PATH}` | Full path to `plan.md` |
-| `{DEFAULT_FEEDBACK_PATH}` | Full path to `pass_N_feedback.md` |
-| `{ADVERSARIAL_FEEDBACK_PATH}` | Full path to `pass_N_adversarial_feedback.md` |
 | `{CUSTOM_FEEDBACK_PATH}` | Full path to `pass_N_custom_feedback.md` |
 | `{CUSTOM_FOCUS}` | The specialized focus area (e.g., "security", "performance", "accessibility") |
 
@@ -143,26 +138,18 @@ If using a named skill as the custom reviewer, the skill should:
 
 1. **Accept inputs:**
    - Spec path
+   - Clarifications path
    - Plan path
-   - Standard feedback path (to avoid duplication)
-   - Adversarial feedback path (to avoid duplication)
 
 2. **Produce output:**
-   - Additional issues (not duplicating standard or adversarial reviews)
-   - Additional assumptions/questions
+   - Issues from specialized perspective
+   - Assumptions/questions
    - Summary from specialized perspective
 
 3. **Follow the feedback format** defined above for easy merging
 
 4. **Focus on specialized domain** (security, performance, accessibility, etc.)
 
-## Merging Custom Feedback
+## Feedback Processing
 
-After the custom review completes, the orchestrator should:
-
-1. Read `pass_N_feedback.md` (standard review)
-2. Read `pass_N_adversarial_feedback.md` (adversarial review)
-3. Read `pass_N_custom_feedback.md` (custom review)
-4. Append custom issues/assumptions to the clarification processing
-5. Update any issue counts in summaries
-6. All feedback files remain separate for audit purposes
+After all parallel reviewers complete, the orchestrator reads all three feedback files independently. All files remain separate for audit purposes. The orchestrator surfaces combined issues and questions to the user, and the update agent handles deduplication when applying feedback.

@@ -2,7 +2,7 @@
 
 Use this template when spawning a fresh review agent via the Task tool.
 
-> **Note:** This is the standard review agent. It runs in **parallel** with the adversarial review agent (`adversarial-review-prompt.md`). If a custom reviewer is configured, it runs sequentially after both parallel agents complete. See `custom-review-prompt.md` for the custom review template.
+> **Note:** This is the standard review agent. It runs in **parallel** with the adversarial review agent (`adversarial-review-prompt.md`). If a custom reviewer is configured, it also runs in parallel. See `custom-review-prompt.md` for the custom review template.
 
 ---
 

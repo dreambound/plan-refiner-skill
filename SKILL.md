@@ -96,9 +96,9 @@ To prevent drift from the original specification:
 If a subagent fails (returns an error, writes an empty file, or doesn't write its output file):
 
 1. **Generation agent failure** (Step 1): Abort and report error to user. Cannot proceed without an initial plan.
-2. **One parallel review agent fails** (Step 2a): Proceed with the successful agent's feedback. Note in the pass summary: "Warning: [standard/adversarial] review unavailable this pass — proceeding with partial feedback."
-3. **Both parallel review agents fail** (Step 2a): Abort the current pass and report error to user. Offer to retry or finalize with the current plan.
-4. **Custom review agent fails** (Step 2a-bis): Continue without custom feedback. Note: "Custom review unavailable this pass."
+2. **One review agent fails** (Step 2a): Proceed with the remaining agents' feedback. Note in the pass summary: "Warning: [standard/adversarial/custom] review unavailable this pass — proceeding with partial feedback." Custom reviewer failure is always non-critical (it's optional).
+3. **Two review agents fail** (Step 2a): Proceed if the standard reviewer succeeded. If the standard reviewer is among the failures, abort the pass and offer to retry or finalize with the current plan.
+4. **All review agents fail** (Step 2a): Abort the current pass and report error to user. Offer to retry or finalize with the current plan.
 5. **Update agent fails** (Step 2e): Restore plan.md from the latest audit copy (`audit/plan_v{pass-1}.md`). Report error and offer to retry or skip this pass.
 
 **Verification after each agent:** After each subagent completes, verify its output file exists and is non-empty before proceeding. If verification fails, follow the failure handling above.
@@ -231,9 +231,9 @@ For each pass (1, 2, 3, ...):
 
 Set the current pass's task to `in_progress` via `TaskUpdate`. For passes 1-3 this is one of the pre-created tasks. For passes 4+, this is the dynamically created task (see 2f).
 
-#### 2a. Spawn Standard + Adversarial Review Agents (Parallel)
+#### 2a. Spawn Review Agents (Parallel)
 
-Spawn **two review agents in parallel** using a single message with multiple Task tool calls. Both use `subagent_type: general-purpose`.
+Spawn **up to three review agents in parallel** using a single message with multiple Task tool calls. All use `subagent_type: general-purpose`.
 
 **Important:** Do NOT use `subagent_type: Plan` as it triggers plan mode behavior and will prompt to execute instead of returning feedback.
 
@@ -260,42 +260,26 @@ Spawn **two review agents in parallel** using a single message with multiple Tas
 - Challenges: assumptions, implementation choices, unstated dependencies, failure modes, over-engineering, under-specification
 - Returns: issue count + top concerns + assumptions questioned + resilience assessment
 
-**Both agents must be launched in a single message** to run in parallel.
+**Agent 3 — Custom Review** (conditional: only if `config.json` has `custom_reviewer.enabled: true`):
+- Prompt with file paths (not contents):
+  - Path to `initial_spec.md` (source of truth)
+  - Path to `clarifications.md`
+  - Path to `plan.md`
+  - Current pass number
+  - Custom focus area from `config.json` (e.g., "security considerations")
+  - Path to write feedback: `pass_N_custom_feedback.md`
+- Review instructions from `references/custom-review-prompt.md`
+- Does NOT read standard or adversarial feedback (runs in parallel — independent specialized perspective)
+- Focuses on the configured custom area (security, performance, accessibility, etc.)
+- Returns: custom focus + additional issue count + convergence signal + additional questions
 
-**Error handling:** After both agents return, verify that `pass_N_feedback.md` and `pass_N_adversarial_feedback.md` exist and are non-empty. If one agent failed, proceed with available feedback and note the gap. If both failed, abort the pass and offer to retry.
+**All enabled agents must be launched in a single message** to run in parallel.
 
-#### 2a-bis. Spawn Custom Review Agent (if configured, sequential)
-
-If `config.json` has `custom_reviewer.enabled: true`, spawn the custom reviewer **after** both parallel agents complete (sequential). The custom reviewer reads outputs from both agents to avoid duplication.
-
-1. **Spawn Custom Review Sub-Agent** via Task tool:
-   - `subagent_type: general-purpose`
-   - Provide file paths:
-     - Spec path: `initial_spec.md`
-     - Plan path: `plan.md`
-     - Standard feedback path: `pass_N_feedback.md`
-     - Adversarial feedback path: `pass_N_adversarial_feedback.md`
-   - Output path: `pass_N_custom_feedback.md`
-   - Use prompt template from `references/custom-review-prompt.md`
-   - Inject the custom focus from config (e.g., "security considerations")
-
-2. **Process Custom Review Summary**:
-   - Custom agent returns: focus area + additional issue count + additional questions + assessment
-   - Additional issues are written to `pass_N_custom_feedback.md`
-
-3. **Merge Feedback for Processing**:
-   - Standard feedback: `pass_N_feedback.md`
-   - Adversarial feedback: `pass_N_adversarial_feedback.md`
-   - Custom feedback: `pass_N_custom_feedback.md`
-   - All files remain separate for audit purposes
-   - Combined questions from all reviews are surfaced to user in step 2c
-   - Update total issue count in summaries
-
-**If custom reviewer skill not found:** Log warning and continue with standard + adversarial reviews only.
+**Error handling:** After all agents return, verify that each expected feedback file exists and is non-empty. See Error Handling section above for failure scenarios.
 
 #### 2b. Process Agent Summaries
 
-Both review agents return brief summaries (not full feedback):
+All review agents return brief summaries (not full feedback):
 
 **Standard Review Summary:**
 1. **Alignment Status**: "Aligned" or "Warning: [drift description]"
@@ -309,13 +293,19 @@ Both review agents return brief summaries (not full feedback):
 3. **Top Concerns**: Most significant challenges
 4. **Assumptions Questioned**: Questions to validate assumptions
 
-Full feedback is already saved to `pass_N_feedback.md` and `pass_N_adversarial_feedback.md` by the agents.
+**Custom Review Summary** (if custom reviewer enabled):
+1. **Custom Focus**: The specialized area reviewed
+2. **Additional Issue Count**: Number of issues found (with severity breakdown)
+3. **Convergence Signal**: "Significant issues remain" or "No significant issues found — plan is sound from [focus] perspective"
+4. **Additional Questions**: New questions from the specialized perspective
+
+Full feedback is already saved to the respective `pass_N_*_feedback.md` files by the agents.
 
 **If alignment warning received:** Surface to user via AskUserQuestion before proceeding.
 
 #### 2b-bis. Surface Issues to User
 
-After processing agent summaries, read all feedback files and display identified issues:
+After all review agents complete and summaries are processed, read all feedback files and display identified issues:
 
 1. **Read feedback files**:
    - Read `pass_N_feedback.md` for standard review issues
@@ -455,18 +445,18 @@ See the following templates in `references/`:
 - `generation-prompt.md` - Initial plan generation agent
 - `review-prompt.md` - Standard review agent (all criteria, every pass)
 - `adversarial-review-prompt.md` - Adversarial review agent (challenges and stress-tests)
-- `custom-review-prompt.md` - Custom review agents (supplementary, specialized feedback)
+- `custom-review-prompt.md` - Custom review agent (parallel, specialized feedback)
 - `update-prompt.md` - Plan update agent after feedback
 
 ## Review Architecture
 
-Every pass spawns two review agents in parallel. Reviewers evaluate all criteria each pass but may report "no significant issues" for clean areas, enabling convergence detection:
+Every pass spawns up to three review agents in parallel. Reviewers evaluate all criteria each pass but may report "no significant issues" for clean areas, enabling convergence detection:
 
 | Agent | Scope | Output |
 |-------|-------|--------|
 | Standard Reviewer | All criteria: spec alignment, completeness, feasibility, clarity, coherence, edge cases, version accuracy | `pass_N_feedback.md` |
 | Adversarial Reviewer | Challenges: assumptions, simpler alternatives, unstated dependencies, failure modes, over/under-engineering | `pass_N_adversarial_feedback.md` |
-| Custom Reviewer (optional) | Specialized focus (e.g., security, performance) — runs sequentially after both parallel agents | `pass_N_custom_feedback.md` |
+| Custom Reviewer (optional) | Specialized focus (e.g., security, performance) — runs in parallel, independent specialized perspective | `pass_N_custom_feedback.md` |
 
 ## Example Invocation
 
