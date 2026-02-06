@@ -122,13 +122,13 @@ Before beginning refinement, ask about optional custom review.
 
 **Question 1: Custom Reviewer**
 
-Check for `~/.claude/plans/plan-refiner/preferences.json`:
+**Read** `~/.claude/plans/plan-refiner/preferences.json` using the Read tool. Parse its JSON contents.
 
-If `preferences.json` exists and has a previous `custom_reviewer`:
-- Ask: "Last time you used '{skill-name}' as additional reviewer. Use it again?"
+If the file exists AND its `custom_reviewer` field is non-null AND `custom_reviewer.enabled` is `true`:
+- Ask: "Last time you used '`{custom_reviewer.value}`' as additional reviewer (focus: `{custom_reviewer.focus}`). Use it again?"
 - Options: Yes / No / Different skill
 
-Otherwise:
+Otherwise (file doesn't exist, or `custom_reviewer` is null, or `custom_reviewer.enabled` is false):
 - Ask: "Add a custom review agent for specialized feedback? (e.g., security, performance)"
 - Options: No (default only) / Yes, specify skill
 
@@ -214,15 +214,16 @@ Tasks follow: `pending` → `in_progress` → `completed`
    }
    ```
    - Set `custom_reviewer` to null if not configured
-7. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
-8. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
-9. **Spawn Plan Generation Agent** to create initial plan:
-   - Use Task tool with `subagent_type: general-purpose`
-   - Provide file paths (not contents): `initial_spec.md`, `plan.md`, `audit/plan_v0.md`
-   - Agent reads spec, writes plan to both locations
-   - Agent returns: brief summary of plan structure (not full content)
-   - See `references/generation-prompt.md` for the prompt template
-10. **Set Task 1 to `completed`** (`TaskUpdate` with status `completed`)
+7. **Write `~/.claude/plans/plan-refiner/preferences.json`** — update (or create) with the custom reviewer configuration chosen during Startup Questions. If custom reviewer was enabled, set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`) and append the skill name to `custom_reviewer_history` (if not already present). If custom reviewer was disabled, set `custom_reviewer` to `null` but preserve any existing `custom_reviewer_history`. Always update `updated_at`.
+8. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
+9. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
+10. **Spawn Plan Generation Agent** to create initial plan:
+    - Use Task tool with `subagent_type: general-purpose`
+    - Provide file paths (not contents): `initial_spec.md`, `plan.md`, `audit/plan_v0.md`
+    - Agent reads spec, writes plan to both locations
+    - Agent returns: brief summary of plan structure (not full content)
+    - See `references/generation-prompt.md` for the prompt template
+11. **Set Task 1 to `completed`** (`TaskUpdate` with status `completed`)
 
 ### Step 2: Review Loop (Minimum 3 Passes)
 
