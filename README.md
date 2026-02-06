@@ -18,14 +18,16 @@ An agent skill that generates and iteratively refines implementation plans throu
 ┌───────────────────────────┴────────────────────────────┐
 │                     REVIEW LOOP (3+ passes)            │
 │                                                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │   Standard   │  │ Adversarial  │  │   Custom     │  │
-│  │   Review     │  │   Review     │  │   Review     │  │
-│  │ (alignment,  │  │ (assumptions,│  │ (security,   │  │
-│  │  versions    │  │  failure     │  │  perf, …)    │  │
-│  │  via C7)     │  │  modes)      │  │  (optional)  │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
-│         └─────────────────┼─────────────────┘          │
+│ ┌────────────── Agent Team (if available) ───────────┐ │
+│ │ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │ │
+│ │ │   Standard   │ │ Adversarial  │ │   Custom     │ │ │
+│ │ │   Review     │ │   Review     │ │   Review     │ │ │
+│ │ │ (alignment,  │ │ (assumptions,│ │ (security,   │ │ │
+│ │ │  versions    │ │  failure     │ │  perf, …)    │ │ │
+│ │ │  via C7)     │ │  modes)      │ │  (optional)  │ │ │
+│ │ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ │ │
+│ └────────┼────────────────┼────────────────┼─────────┘ │
+│          └────────────────┼────────────────┘           │
 │                           ▼                            │
 │                ┌─────────────────────┐                 │
 │                │  Surface Issues &   │                 │
@@ -76,7 +78,7 @@ Or provide content directly:
 The skill implements an iterative refinement process:
 
 1. **Initial Plan Generation** — A fresh agent creates a comprehensive plan from your specification
-2. **Review Loop (3+ passes)** — Each pass spawns up to three reviewers in parallel:
+2. **Review Loop (3+ passes)** — Each pass creates a fresh review team (when Agent Teams are available) or spawns parallel subagents (fallback). Up to three reviewers run in parallel:
    - **Standard Review** — checks spec alignment, completeness, feasibility, and verifies versions via Context7
    - **Adversarial Review** — challenges assumptions, questions implementation choices, identifies failure modes
    - **Custom Review** (optional) — adds a configurable specialized perspective (security, performance, etc.)
@@ -94,6 +96,7 @@ The skill implements an iterative refinement process:
 - **User in the Loop**: Issues are surfaced as questions; you provide feedback each pass
 - **Audit Trail**: Every plan version is preserved, with a changelog documenting each pass
 - **Error Resilience**: Graceful fallbacks when individual reviewers or Context7 are unavailable
+- **Agent Teams** (experimental): When available, review agents are organized as a coordinated team per pass with structured task tracking via TaskCreate/TaskUpdate. Fresh team each pass preserves independent perspective. Falls back to parallel subagents automatically when teams are unavailable.
 
 ### Output Structure
 
@@ -116,6 +119,46 @@ Plans are saved to `~/.claude/plans/plan-refiner/{spec-slug}/`:
 ```
 
 Global preferences persist at `~/.claude/plans/plan-refiner/preferences.json`.
+
+## Agent Teams (Experimental)
+
+When Claude Code Agent Teams are available (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), the skill
+organizes each pass's review agents as a coordinated team:
+
+```
+Pass N:
+  ┌─────────────────── Agent Team ───────────────────┐
+  │                                                   │
+  │  [Task 1]          [Task 2]          [Task 3]    │
+  │  Standard          Adversarial       Custom       │
+  │  Reviewer          Reviewer          Reviewer     │
+  │  (teammate)        (teammate)        (optional)   │
+  │                                                   │
+  │  TaskCreate → TaskUpdate(owner) → TaskList(done)  │
+  └───────────────────────────────────────────────────┘
+         ↓ Team destroyed after each pass (fresh perspective)
+```
+
+### How it works
+
+1. At the start of each review pass, `TeamCreate` creates a fresh team
+2. Review tasks are created via `TaskCreate` with full review instructions and assigned owners
+3. Reviewer teammates are spawned in parallel (tasks are pre-assigned before spawn to avoid race conditions)
+4. Teammates execute reviews, write feedback files, and mark tasks completed (5-minute timeout per task)
+5. The team is shut down and deleted before proceeding to feedback processing
+
+### Fallback
+
+If Agent Teams are unavailable (env var not set, tool unavailable), the skill
+automatically falls back to spawning parallel subagents — the same behavior as
+before this feature was added. The fallback is detected on the first review pass
+and applies to all subsequent passes in the session.
+
+### Why per-pass teams?
+
+Each review pass creates and destroys its own team rather than reusing a persistent
+team. This preserves the skill's core **fresh-perspective principle**: every pass
+gets new agents with no accumulated context bias from previous passes.
 
 ## License
 

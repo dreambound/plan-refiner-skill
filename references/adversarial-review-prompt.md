@@ -137,15 +137,48 @@ When using this template, replace:
 | `{PLAN_PATH}` | Full path to `plan.md` |
 | `{ADVERSARIAL_FEEDBACK_PATH}` | Full path to `pass_N_adversarial_feedback.md` |
 
+## Team Mode
+
+When spawned as a member of a review team (rather than a standalone subagent):
+
+1. Check `TaskList` to find your assigned task
+2. Read the task description — it contains your full review instructions and file paths
+3. Execute the review exactly as described (read files, write feedback, etc.)
+4. Mark your task as `completed` via `TaskUpdate`
+5. Return your brief summary to the orchestrator
+
+If spawned as a standalone subagent (no team context), ignore this section.
+
+### Team Spawn Prompt
+
+When using teams, the teammate's spawn prompt is minimal:
+
+> You are a member of a plan review team. Check TaskList for the task assigned
+> to you (filter by owner matching your name). Read the task description for
+> your full review instructions and file paths. Execute the review, write your
+> feedback file, mark your task completed via TaskUpdate, then return a brief summary.
+
+The full review instructions (criteria, feedback format, return format) are embedded
+in the TaskCreate description using this template with file paths filled in.
+
 ## Task Tool Configuration
 
-When spawning the adversarial review agent:
+### Standalone Mode (default)
 
 ```
 Task tool parameters:
 - subagent_type: "general-purpose"
 - description: "Adversarial review pass {N}"
 - prompt: [Filled template above with file paths]
+```
+
+### Team Mode (when Agent Teams available)
+
+```
+Task tool parameters:
+- TaskCreate description: [Filled template above with file paths]
+- Teammate spawn prompt: [Minimal team instructions above]
+- subagent_type: "general-purpose", team_name: "plan-refiner-{spec-slug}-pass-{N}"
 ```
 
 **Why general-purpose?**
