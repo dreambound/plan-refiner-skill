@@ -1,0 +1,166 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - "*"
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  claude-review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch base branch (for diffs)
+        run: |
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+
+      - name: Authenticate GH CLI
+        run: echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
+
+      - name: Resolve old Claude bot review threads
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          pr_node_id=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  id
+                }
+              }
+            }
+          ' -f owner="${REPO%/*}" -f repo="${REPO#*/}" -F number="$PR_NUMBER" \
+            --jq '.data.repository.pullRequest.id')
+
+          if [ -z "$pr_node_id" ]; then
+            echo "Could not find PR #$PR_NUMBER"
+            exit 0
+          fi
+
+          threads=$(gh api graphql -f query='
+            query($id: ID!) {
+              node(id: $id) {
+                ... on PullRequest {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      id
+                      isResolved
+                      comments(first: 1) {
+                        nodes {
+                          author {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ' -f id="$pr_node_id")
+
+          thread_ids=$(echo "$threads" | jq -r '
+            .data.node.reviewThreads.nodes
+            | map(select(.isResolved == false))
+            | map(select(.comments.nodes[0].author.login == "claude[bot]"))
+            | map(.id)
+            | .[]
+          ')
+
+          if [ -z "$thread_ids" ]; then
+            echo "No unresolved claude[bot] review threads found on PR #$PR_NUMBER"
+            exit 0
+          fi
+
+          echo "$thread_ids" | while read -r thread_id; do
+            [ -z "$thread_id" ] && continue
+
+            response=$(gh api graphql -f query='
+              mutation($threadId: ID!) {
+                resolveReviewThread(input: {threadId: $threadId}) {
+                  thread {
+                    isResolved
+                  }
+                }
+              }
+            ' -f threadId="$thread_id")
+
+            resolved=$(echo "$response" | jq -r '.data.resolveReviewThread.thread.isResolved // false')
+            echo "Resolved review thread: $thread_id (isResolved=$resolved)"
+          done
+
+      - name: Delete old Claude bot comments
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          comment_ids=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq '
+            .[]
+            | select(.user.login == "claude[bot]")
+            | .id
+          ')
+
+          if [ -z "$comment_ids" ]; then
+            echo "No old Claude bot comments found on PR #$PR_NUMBER"
+            exit 0
+          fi
+
+          echo "$comment_ids" | while read -r comment_id; do
+            [ -z "$comment_id" ] && continue
+            echo "Deleting Claude bot comment: $comment_id"
+            gh api -X DELETE "repos/$REPO/issues/comments/$comment_id" || echo "Failed to delete comment $comment_id"
+          done
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          path_to_claude_code_executable: claude
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GH_PAT }}
+          use_sticky_comment: true
+          track_progress: true
+          show_full_output: true
+
+          settings: '{"env":{"GH_TOKEN":"${{ secrets.GH_PAT }}"}}'
+
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Bash,WebSearch,WebFetch,Read,Grep,Glob,LS,TodoWrite,Task,gh,mcp__context7__resolve_library_id,mcp__context7__get_library_docs"
+            --mcp-config .github/workflows/mcp.json
+
+          prompt: |
+            Use the Task tool to spawn the `code-reviewer` agent with the following context:
+
+            REPO: ${{ github.repository }}
+            PR_NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request following the code-reviewer agent instructions.
+
+            After the review is complete, if the PR is approved (no blocking issues found),
+            run: gh pr review ${{ github.event.pull_request.number }} --approve --body "Approved by Claude Code Review"
+            If blocking issues were found, do NOT approve the PR.
