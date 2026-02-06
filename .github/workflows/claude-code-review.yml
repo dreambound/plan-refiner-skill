@@ -24,8 +24,20 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Fetch base branch (for diffs)
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --prune --depth=1 origin +refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+          set -euo pipefail
+          git check-ref-format --branch "$BASE_REF"
+          git fetch --no-tags --prune --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+      - name: Materialize trusted review configs from base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git show "origin/${BASE_REF}:.github/workflows/mcp.json" > /tmp/trusted-mcp.json
+          git show "origin/${BASE_REF}:.claude/agents/code-reviewer.md" > /tmp/trusted-reviewer.md
 
       - name: Authenticate GH CLI
         run: echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
@@ -151,10 +163,11 @@ jobs:
           claude_args: |
             --model claude-opus-4-6
             --allowedTools "Bash,WebSearch,WebFetch,Read,Grep,Glob,LS,TodoWrite,Task,gh,mcp__context7__resolve_library_id,mcp__context7__get_library_docs"
-            --mcp-config .github/workflows/mcp.json
+            --mcp-config /tmp/trusted-mcp.json
 
           prompt: |
-            Use the Task tool to spawn the `code-reviewer` agent with the following context:
+            Read the reviewer instructions from /tmp/trusted-reviewer.md and follow them.
+            Use the Task tool to spawn a code-reviewer agent with the following context:
 
             REPO: ${{ github.repository }}
             PR_NUMBER: ${{ github.event.pull_request.number }}
