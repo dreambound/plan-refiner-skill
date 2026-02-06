@@ -39,12 +39,19 @@ jobs:
           git show "origin/${BASE_REF}:.github/workflows/mcp.json" > /tmp/trusted-mcp.json
           git show "origin/${BASE_REF}:.claude/agents/code-reviewer.md" > /tmp/trusted-reviewer.md
 
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DREAMBOUND_BOT_APP_ID }}
+          private-key: ${{ secrets.DREAMBOUND_BOT_PRIVATE_KEY }}
+
       - name: Authenticate GH CLI
-        run: echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
+        run: echo "${{ steps.app-token.outputs.token }}" | gh auth login --with-token
 
       - name: Resolve old Claude bot review threads
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -121,7 +128,7 @@ jobs:
 
       - name: Delete old Claude bot comments
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -146,19 +153,22 @@ jobs:
           done
 
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        run: |
+          echo "Installing latest Claude Code CLI..."
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "Claude Code CLI installed: $(~/.local/bin/claude --version)"
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
-          path_to_claude_code_executable: claude
+          path_to_claude_code_executable: /home/runner/.local/bin/claude
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ steps.app-token.outputs.token }}
           use_sticky_comment: true
           track_progress: true
           show_full_output: true
 
-          settings: '{"env":{"GH_TOKEN":"${{ secrets.GH_PAT }}"}}'
+          settings: '{"env":{"GH_TOKEN":"${{ steps.app-token.outputs.token }}"}}'
 
           claude_args: |
             --model claude-opus-4-6
