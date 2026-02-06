@@ -101,6 +101,10 @@ If a subagent fails (returns an error, writes an empty file, or doesn't write it
 3. **Two review agents fail** (Step 2a): Proceed if the standard reviewer succeeded. If the standard reviewer is among the failures, abort the pass and offer to retry or finalize with the current plan.
 4. **All review agents fail** (Step 2a): Abort the current pass and report error to user. Offer to retry or finalize with the current plan.
 5. **Update agent fails** (Step 2e): Restore plan.md from the latest audit copy (`audit/plan_v{pass-1}.md`). Report error and offer to retry or skip this pass.
+6. **TeamCreate fails (first pass):** Set `use_teams = false`, proceed with subagent approach for all passes. Non-fatal.
+7. **Teammate fails to complete task (team mode):** Same as existing "review agent fails" handling — check if feedback file exists and is non-empty. Proceed with remaining agents' feedback per existing rules (items 2-4).
+8. **TeamDelete fails:** Non-critical. Log the failure and proceed. Orphaned teams can be cleaned up via `TeamDelete` in a subsequent session.
+9. **Teammate rejects shutdown:** Non-critical. Proceed with `TeamDelete` anyway — `TeamDelete` handles active teammates. Do not block on shutdown confirmation.
 
 **Verification after each agent:** After each subagent completes, verify its output file exists and is non-empty before proceeding. If verification fails, follow the failure handling above.
 
@@ -113,6 +117,43 @@ The orchestrator accumulates ~4,000-8,000 tokens per pass from agent spawn promp
 - **Passes 8+:** Extended sessions may exhibit degraded orchestrator performance. Consider finalizing or restarting with the current plan as the new baseline.
 
 For subagents, each starts fresh per pass (no accumulation). However, `clarifications.md` grows by ~500 tokens per pass. For sessions exceeding 8 passes, earlier clarifications that have already been incorporated into the plan can be summarized to reduce subagent input size.
+
+## Agent Teams Integration (Experimental)
+
+When Claude Code Agent Teams are available, review agents are organized as a
+fresh team for each review pass. This provides structured task coordination
+while preserving the fresh-perspective principle (each pass = new team = new agents).
+
+### Team Lifecycle (Per-Pass)
+
+Each review pass creates and destroys its own team:
+
+1. **Create team**: `TeamCreate` with team_name "plan-refiner-{spec-slug}-pass-{N}"
+2. **Create and assign review tasks**: `TaskCreate` for each reviewer with pass-specific file paths, then immediately `TaskUpdate` to set `owner` on each task (so tasks are assigned before teammates exist)
+3. **Spawn teammates**: `Task` tool with `team_name` and `name` params (all in one message — teammates find their pre-assigned tasks on startup)
+4. **Wait for completion**: Poll `TaskList` every 15-30 seconds until all review tasks show completed, with a 5-minute timeout per task
+5. **Shut down teammates**: `SendMessage` with type "shutdown_request" to each
+6. **Delete team**: `TeamDelete` (proceeds even if a teammate rejects shutdown — non-critical)
+
+### Fallback to Simple Subagents
+
+On the FIRST review pass, attempt `TeamCreate`. If it fails (tool unavailable,
+permission denied, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` not set):
+
+1. Set internal flag: `use_teams = false`
+2. Log: "Agent Teams unavailable — using parallel subagents for all review passes"
+3. For this pass AND all subsequent passes, use the existing `Task` tool approach
+4. Do NOT retry `TeamCreate` on subsequent passes
+
+**Detection mechanism:** The skill detects team availability by attempting `TeamCreate` and handling failure — it does not check environment variables directly. The env var `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is documented in the README for users to enable the feature; the skill's fallback logic is purely try-and-catch.
+
+### Scope
+
+| Agent | Uses Teams? | Rationale |
+|-------|-------------|-----------|
+| Generation agent | No | One-shot, single agent |
+| Review agents (2-3) | Yes (if available) | Parallel coordination within each pass |
+| Update agent | No | One-shot, single agent |
 
 ## Startup Configuration
 
@@ -235,9 +276,36 @@ Set the current pass's task to `in_progress` via `TaskUpdate`. For passes 1-3 th
 
 #### 2a. Spawn Review Agents (Parallel)
 
-Spawn **up to three review agents in parallel** using a single message with multiple Task tool calls. All use `subagent_type: general-purpose`.
-
 **Important:** Do NOT use `subagent_type: Plan` as it triggers plan mode behavior and will prompt to execute instead of returning feedback.
+
+**If `use_teams` is true (or not yet determined — first pass):**
+
+1. Attempt `TeamCreate`:
+   - `team_name`: `"plan-refiner-{spec-slug}-pass-{N}"`
+   - `description`: `"Review team for pass {N}"`
+2. If TeamCreate fails on first pass: set `use_teams = false`, fall through to subagent path below
+3. If succeeds (set `use_teams = true` on first pass):
+   a. Create review tasks via `TaskCreate` — each task description contains the filled-in prompt from the corresponding reference template (file paths, pass number, output path):
+      - Task 1: Standard review — description from `references/review-prompt.md` filled in
+      - Task 2: Adversarial review — description from `references/adversarial-review-prompt.md` filled in
+      - Task 3 (if custom enabled): Custom review — description from `references/custom-review-prompt.md` filled in
+   b. Assign tasks immediately via `TaskUpdate` with `owner` set to each teammate's name (tasks must be assigned BEFORE teammates are spawned to avoid a race condition where teammates can't identify their task):
+      - Task 1 owner: `"standard-reviewer"`
+      - Task 2 owner: `"adversarial-reviewer"`
+      - Task 3 owner (if enabled): `"custom-reviewer"`
+   c. Spawn teammates via `Task` tool in a single message (parallel):
+      - `name: "standard-reviewer"`, `subagent_type: "general-purpose"`, `team_name: "plan-refiner-{spec-slug}-pass-{N}"`
+      - `name: "adversarial-reviewer"`, `subagent_type: "general-purpose"`, `team_name: ...`
+      - `name: "custom-reviewer"` (if enabled), `subagent_type: "general-purpose"`, `team_name: ...`
+      - Each teammate's spawn prompt: "You are a member of a plan review team. Check TaskList for the task assigned to you (by owner name). Read the task description for your review instructions and file paths. Execute the review, write your feedback file, mark your task completed via TaskUpdate, then return a brief summary."
+   d. Wait for all review tasks to show `completed` — poll `TaskList` every 15-30 seconds, up to a **5-minute timeout per task**. If a task is still `in_progress` after timeout, check if its feedback file exists and is non-empty. If the file exists, treat the review as completed (teammate may have crashed after writing but before calling TaskUpdate). If the file is missing or empty, treat as a reviewer failure per error handling items 2-4.
+   e. Send `shutdown_request` via `SendMessage` to each teammate
+   f. Call `TeamDelete` (proceeds even if a teammate rejects shutdown — non-critical)
+   g. Proceed to step 2b (read feedback files — same as current)
+
+**If `use_teams` is false:**
+
+Spawn **up to three review agents in parallel** using a single message with multiple Task tool calls. All use `subagent_type: general-purpose`.
 
 **Agent 1 — Standard Review:**
 - Prompt with file paths (not contents):
@@ -277,7 +345,7 @@ Spawn **up to three review agents in parallel** using a single message with mult
 
 **All enabled agents must be launched in a single message** to run in parallel.
 
-**Error handling:** After all agents return, verify that each expected feedback file exists and is non-empty. See Error Handling section above for failure scenarios.
+**Error handling (both modes):** After all agents return, verify that each expected feedback file exists and is non-empty. See Error Handling section above for failure scenarios.
 
 #### 2b. Process Agent Summaries
 
