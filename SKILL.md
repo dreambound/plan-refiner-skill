@@ -74,6 +74,8 @@ Preferences are stored per-project to keep custom reviewer configurations scoped
 
 **Project root detection:** Use `git rev-parse --show-toplevel` to find the git repository root. If not in a git repository, use the current working directory.
 
+**Why this path differs from plan output:** Per-run plan artifacts live at `~/.claude/plans/plan-refiner/{spec-slug}/` — a global, session-scoped location for disposable outputs. Preferences live at `{project-root}/.claude/plan-refiner/` because they are project configuration (which custom reviewer to use) and must stay scoped to the project where that reviewer skill is installed.
+
 **Spec Slug Generation:**
 - From file path: Use filename without extension (e.g., `my-feature.md` → `my-feature`)
 - From content: Slugify first heading or first line (e.g., "Auth Feature Spec" → `auth-feature-spec`)
