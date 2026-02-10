@@ -63,12 +63,18 @@ Create a namespaced directory under Claude's plan directory:
 └── pass_N_changelog.md             # Changes made in each pass and why
 ```
 
-### Global Preferences
+### Per-Project Preferences
+
+Preferences are stored per-project to keep custom reviewer configurations scoped to the project where they're available:
 
 ```
-~/.claude/plans/plan-refiner/
-└── preferences.json          # Global preferences across all runs
+{project-root}/.claude/plan-refiner/
+└── preferences.json          # Project-specific preferences
 ```
+
+**Project root detection:** Use `git rev-parse --show-toplevel` to find the git repository root. If not in a git repository, use the current working directory.
+
+**Why this path differs from plan output:** Per-run plan artifacts live at `~/.claude/plans/plan-refiner/{spec-slug}/` — a global, session-scoped location for disposable outputs. Preferences live at `{project-root}/.claude/plan-refiner/` because they are project configuration (which custom reviewer to use) and must stay scoped to the project where that reviewer skill is installed.
 
 **Spec Slug Generation:**
 - From file path: Use filename without extension (e.g., `my-feature.md` → `my-feature`)
@@ -163,7 +169,9 @@ Before beginning refinement, ask about optional custom review.
 
 **Question 1: Custom Reviewer**
 
-**Read** `~/.claude/plans/plan-refiner/preferences.json` using the Read tool. Parse its JSON contents.
+**Determine project root** by running `git rev-parse --show-toplevel` via Bash. If this fails (not a git repo), use the current working directory. Store as `{project-root}`.
+
+**Read** `{project-root}/.claude/plan-refiner/preferences.json` using the Read tool. Parse its JSON contents.
 
 If the file exists AND its `custom_reviewer` field is non-null AND `custom_reviewer.enabled` is `true`:
 - Ask: "Last time you used '`{custom_reviewer.value}`' as additional reviewer (focus: `{custom_reviewer.focus}`). Use it again?"
@@ -184,7 +192,7 @@ Also ask for the focus description (e.g., "security considerations", "performanc
 
 ### Preferences Persistence
 
-Store in `~/.claude/plans/plan-refiner/preferences.json`:
+Store in `{project-root}/.claude/plan-refiner/preferences.json`:
 
 ```json
 {
@@ -255,7 +263,15 @@ Tasks follow: `pending` → `in_progress` → `completed`
    }
    ```
    - Set `custom_reviewer` to null if not configured
-7. **Write `~/.claude/plans/plan-refiner/preferences.json`** — update (or create) with the custom reviewer configuration chosen during Startup Questions. If custom reviewer was enabled, set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`) and append the skill name to `custom_reviewer_history` (if not already present). If custom reviewer was disabled, set `custom_reviewer` to `null` but preserve any existing `custom_reviewer_history`. Always update `updated_at`.
+7. **Write `{project-root}/.claude/plan-refiner/preferences.json`**:
+   - Create the directory `{project-root}/.claude/plan-refiner/` if it does not exist
+   - If custom reviewer was enabled:
+     - Set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`)
+     - Append the skill name to `custom_reviewer_history` (if not already present)
+   - If custom reviewer was disabled:
+     - Set `custom_reviewer` to `null`
+     - Preserve any existing `custom_reviewer_history`
+   - Always update `updated_at`
 8. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
 9. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
 10. **Spawn Plan Generation Agent** to create initial plan:
