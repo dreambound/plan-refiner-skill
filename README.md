@@ -118,7 +118,7 @@ Plans are saved to `~/.claude/plans/plan-refiner/{spec-slug}/`:
 └── pass_N_changelog.md              # Changes applied and feedback addressed
 ```
 
-Global preferences persist at `~/.claude/plans/plan-refiner/preferences.json`.
+Per-project preferences are stored at `{project-root}/.claude/plan-refiner/preferences.json`.
 
 ## Agent Teams (Experimental)
 
