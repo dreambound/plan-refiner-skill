@@ -261,7 +261,15 @@ Tasks follow: `pending` → `in_progress` → `completed`
    }
    ```
    - Set `custom_reviewer` to null if not configured
-7. **Write `{project-root}/.claude/plan-refiner/preferences.json`** — create the directory `{project-root}/.claude/plan-refiner/` if it does not exist. Update (or create) the file with the custom reviewer configuration chosen during Startup Questions. If custom reviewer was enabled, set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`) and append the skill name to `custom_reviewer_history` (if not already present). If custom reviewer was disabled, set `custom_reviewer` to `null` but preserve any existing `custom_reviewer_history`. Always update `updated_at`.
+7. **Write `{project-root}/.claude/plan-refiner/preferences.json`**:
+   - Create the directory `{project-root}/.claude/plan-refiner/` if it does not exist
+   - If custom reviewer was enabled:
+     - Set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`)
+     - Append the skill name to `custom_reviewer_history` (if not already present)
+   - If custom reviewer was disabled:
+     - Set `custom_reviewer` to `null`
+     - Preserve any existing `custom_reviewer_history`
+   - Always update `updated_at`
 8. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
 9. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
 10. **Spawn Plan Generation Agent** to create initial plan:
