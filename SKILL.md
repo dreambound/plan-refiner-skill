@@ -287,7 +287,7 @@ Tasks follow: `pending` → `in_progress` → `completed`
    }
    ```
    - Set `custom_reviewer` to null if not configured
-8. **Write `{project-root}/.claude/plan-refiner/preferences.json`**:
+7. **Write `{project-root}/.claude/plan-refiner/preferences.json`**:
    - Create the directory `{project-root}/.claude/plan-refiner/` if it does not exist
    - If custom reviewer was enabled:
      - Set `custom_reviewer` to the full config object (`enabled`, `type`, `value`, `focus`)
@@ -296,15 +296,15 @@ Tasks follow: `pending` → `in_progress` → `completed`
      - Set `custom_reviewer` to `null`
      - Preserve any existing `custom_reviewer_history`
    - Always update `updated_at`
-9. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
-10. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
-11. **Spawn Plan Generation Agent** to create initial plan:
+8. **Create progress tasks** via `TaskCreate` — create all 4 tasks from the Progress Tracking table above; store task IDs for status updates
+9. **Set Task 1 to `in_progress`** (`TaskUpdate` with status `in_progress`)
+10. **Spawn Plan Generation Agent** to create initial plan:
     - Use Task tool with `subagent_type: general-purpose`
     - Provide file paths (not contents): `initial_spec.md`, `plan.md`, `audit/plan_v0.md`
     - Agent reads spec, writes plan to both locations
     - Agent returns: brief summary of plan structure (not full content)
     - See `references/generation-prompt.md` for the prompt template
-12. **Set Task 1 to `completed`** (`TaskUpdate` with status `completed`)
+11. **Set Task 1 to `completed`** (`TaskUpdate` with status `completed`)
 
 ### Step 2: Review Loop (Minimum 3 Passes)
 
