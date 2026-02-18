@@ -55,8 +55,33 @@ An agent skill that generates and iteratively refines implementation plans throu
 
 ## Installation
 
+### Option 1: Vendored (recommended for teams/security)
+
+Copy the skill directly into your project. Files are committed to version control and reviewed in PRs — no external fetch at runtime.
+
+```bash
+git clone https://github.com/dreambound/plan-refiner-skill.git /tmp/plan-refiner-skill
+mkdir -p .claude/skills/plan-refiner
+cp -r /tmp/plan-refiner-skill/SKILL.md /tmp/plan-refiner-skill/references .claude/skills/plan-refiner/
+rm -rf /tmp/plan-refiner-skill
+```
+
+### Option 2: Quick install
+
+Convenient but downloads from an external source. You trust the registry and the skill author.
+
 ```bash
 npx skills add dreambound/plan-refiner-skill
+```
+
+### Option 3: Manual personal install
+
+Clone and copy (or symlink) to your personal skills directory. You control the source and can pin to a specific commit hash.
+
+```bash
+git clone https://github.com/dreambound/plan-refiner-skill.git ~/.claude/skills/plan-refiner
+# Or pin to a specific commit:
+# git clone https://github.com/dreambound/plan-refiner-skill.git ~/.claude/skills/plan-refiner && cd ~/.claude/skills/plan-refiner && git checkout <commit-hash>
 ```
 
 ## Usage
@@ -159,6 +184,49 @@ and applies to all subsequent passes in the session.
 Each review pass creates and destroys its own team rather than reusing a persistent
 team. This preserves the skill's core **fresh-perspective principle**: every pass
 gets new agents with no accumulated context bias from previous passes.
+
+## Security Considerations
+
+### Trust Model
+
+| Content Source | Trust Level | Handling |
+|----------------|-------------|----------|
+| Skill instructions (`SKILL.md`, reference templates) | Trusted | Executed as instructions |
+| User specification (`initial_spec.md`) | Semi-trusted | Wrapped in boundary markers; treated as data |
+| User clarifications | Semi-trusted | Wrapped in boundary markers; treated as data |
+| Context7 documentation | Untrusted | External reference data only; directives ignored |
+| Generated plan and feedback | Internal artifact | Not executed as instructions |
+
+### Prompt Injection Defenses
+
+All subagent prompt templates include a `## CRITICAL: Content Safety` preamble that:
+- Defines trust levels for each input file
+- Instructs agents to treat boundary-marked content as data, not instructions
+- Requires flagging any override attempts found in input content
+- Treats external documentation (Context7) as untrusted reference data
+
+### Third-Party Content Handling
+
+The skill reads user specifications and external documentation (Context7) at runtime — this is inherent to its function. User content is isolated via boundary markers, subagents read files directly (no inline interpolation), and all prompts include explicit data/instruction separation language. External docs are classified as untrusted in every subagent prompt. Residual risk is accepted: LLM boundary enforcement is probabilistic, and Claude Code's interactive permission model is the true security boundary.
+
+### Supply Chain Mitigation
+
+This skill is **pure markdown** — it contains no executable code (no `.js`, `.ts`, `.sh`, `.py`, or other scripts). All behavior is defined through prompt templates that Claude interprets at runtime.
+
+To minimize supply chain risk:
+- **Recommended**: Use the vendored installation method (Option 1) — files are committed to your repo and reviewed in PRs
+- **After any installation**, verify the skill contains only expected files:
+  - `SKILL.md`, `README.md`, `LICENSE`
+  - `references/` directory with `.md` files only
+  - `.claude/` directory with `.md` and `.json` files only
+  - **Reject if any `.js`, `.ts`, `.sh`, `.py`, or other executable files are present**
+
+### Limitations
+
+- LLM boundary enforcement is probabilistic, not deterministic — markers raise the bar but do not guarantee isolation
+- Claude Code's interactive permission model (user approves tool calls) is the true security boundary
+- Context7 content cannot be pre-filtered; defensive instructions are the only feasible mitigation
+- Users who choose `npx skills add` accept the supply chain risk (documented with vendored alternative above)
 
 ## License
 
