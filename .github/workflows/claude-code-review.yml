@@ -152,16 +152,9 @@ jobs:
             gh api -X DELETE "repos/$REPO/issues/comments/$comment_id" || echo "Failed to delete comment $comment_id"
           done
 
-      - name: Install Claude Code CLI
-        run: |
-          echo "Installing latest Claude Code CLI..."
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "Claude Code CLI installed: $(~/.local/bin/claude --version)"
-
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
-          path_to_claude_code_executable: /home/runner/.local/bin/claude
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
           use_sticky_comment: true
