@@ -115,7 +115,7 @@ If a subagent fails (returns an error, writes an empty file, or doesn't write it
 5. **Update agent fails** (Step 2e): Restore plan.md from the latest audit copy (`audit/plan_v{pass-1}.md`). Report error and offer to retry or skip this pass.
 6. **TeamCreate fails (first pass):** Set `use_teams = false`, proceed with subagent approach for all passes. Non-fatal.
 7. **Teammate fails to complete task (team mode):** Same as existing "review agent fails" handling — check if feedback file exists and is non-empty. Proceed with remaining agents' feedback per existing rules (items 2-4).
-8. **TeamDelete fails:** Non-critical. Log the failure and proceed. Orphaned teams can be cleaned up via `TeamDelete` in a subsequent session.
+8. `TeamDelete` failure: Non-critical. Log the failure and proceed. Orphaned teams can be cleaned up via `TeamDelete` in a subsequent session.
 9. **Teammate rejects shutdown:** Non-critical. Proceed with `TeamDelete` anyway — `TeamDelete` handles active teammates. Do not block on shutdown confirmation.
 
 **Verification after each agent:** After each subagent completes, verify its output file exists and is non-empty before proceeding. If verification fails, follow the failure handling above.
@@ -153,7 +153,7 @@ Each review pass creates and destroys its own team:
 3. **Spawn teammates**: `Task` tool with `team_name` and `name` params (all in one message — teammates find their pre-assigned tasks on startup)
 4. **Wait for completion**: Poll `TaskList` every 15-30 seconds until all review tasks show completed, with a 5-minute timeout per task
 5. **Shut down teammates**: `SendMessage` with type "shutdown_request" to each
-6. **Delete team**: `TeamDelete` (proceeds even if a teammate rejects shutdown — non-critical)
+6. **Team cleanup**: `TeamDelete` (proceeds even if a teammate rejects shutdown — non-critical)
 
 ### Fallback to Simple Subagents
 
@@ -657,7 +657,7 @@ Spec slugs used in directory paths are sanitized (see Spec Slug Generation rules
 Subagents spawned by this skill:
 - Are `general-purpose` type, operating within Claude Code's interactive permission model
 - Only shell command used: `git rev-parse --show-toplevel` (for project root detection)
-- Cannot execute arbitrary code without user approval via Claude Code's permission system
+- Cannot run code without user approval via Claude Code's permission system
 - Each review pass uses fresh agents with no accumulated context
 
 ### Limitations

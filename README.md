@@ -63,7 +63,6 @@ Copy the skill directly into your project. Files are committed to version contro
 git clone https://github.com/dreambound/plan-refiner-skill.git /tmp/plan-refiner-skill
 mkdir -p .claude/skills/plan-refiner
 cp -r /tmp/plan-refiner-skill/SKILL.md /tmp/plan-refiner-skill/references .claude/skills/plan-refiner/
-rm -rf /tmp/plan-refiner-skill
 ```
 
 ### Option 2: Quick install
