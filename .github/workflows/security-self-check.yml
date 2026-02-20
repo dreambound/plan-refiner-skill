@@ -37,15 +37,15 @@ jobs:
         run: pip install skill-audit==0.1.0
 
       - name: Verify tool dependencies
-        run: skill-audit check-tools
+        run: skill-audit . check-tools
         continue-on-error: true
 
       - name: Run audit (human-readable)
-        run: skill-audit audit . --strict
+        run: skill-audit --strict .
 
       - name: Run audit (SARIF)
         if: always()
-        run: skill-audit audit . --format sarif -o results.sarif
+        run: skill-audit --format sarif -o results.sarif .
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
