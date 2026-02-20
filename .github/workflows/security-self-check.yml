@@ -7,12 +7,14 @@ on:
       - "SKILL.md"
       - "references/**"
       - ".claude/agents/**"
+      - ".github/workflows/security-self-check.yml"
   pull_request:
     branches: [main]
     paths:
       - "SKILL.md"
       - "references/**"
       - ".claude/agents/**"
+      - ".github/workflows/security-self-check.yml"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +34,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install skill-audit
-        run: pip install skill-audit
+        run: pip install skill-audit==0.1.0
 
       - name: Verify tool dependencies
         run: skill-audit check-tools
