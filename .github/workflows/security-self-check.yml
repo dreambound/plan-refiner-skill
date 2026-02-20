@@ -1,0 +1,53 @@
+name: Security Self-Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "SKILL.md"
+      - "references/**"
+      - ".claude/agents/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "SKILL.md"
+      - "references/**"
+      - ".claude/agents/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  skill-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install skill-audit
+        run: pip install skill-audit
+
+      - name: Verify tool dependencies
+        run: skill-audit check-tools
+        continue-on-error: true
+
+      - name: Run audit (human-readable)
+        run: skill-audit audit . --strict
+
+      - name: Run audit (SARIF)
+        if: always()
+        run: skill-audit audit . --format sarif -o results.sarif
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: skill-audit
